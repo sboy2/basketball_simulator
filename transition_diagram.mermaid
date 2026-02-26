@@ -1,0 +1,32 @@
+flowchart TD
+    S([start])
+
+    S -->|"P(tov)"| E0([end_0pts])
+    S -->|"P(no tov) × P(2pr)"| 2A([two_pt_attempt])
+    S -->|"P(no tov) × P(3pr)"| 3A([three_pt_attempt])
+
+    2A -->|"P(no foul) × P(miss 2)"| E0
+    2A -->|"P(no foul) × P(make 2)"| E2([end_2pts])
+    2A -->|"P(foul) × P(miss 2) × P(miss both FT)"| E0
+    2A -->|"P(foul) × P(miss 2) × P(make 1 of 2 FT)"| E1([end_1pt])
+    2A -->|"P(foul) × P(miss 2) × P(make both FT)"| E2
+    2A -->|"P(foul) × P(make 2) × P(miss and1)"| E2
+    2A -->|"P(foul) × P(make 2) × P(make and1)"| E3([end_3pts])
+
+    3A -->|"P(no foul) × P(miss 3)"| E0
+    3A -->|"P(no foul) × P(make 3)"| E3
+    3A -->|"P(foul) × P(miss 3) × P(make 0 of 3 FT)"| E0
+    3A -->|"P(foul) × P(miss 3) × P(make 1 of 3 FT)"| E1
+    3A -->|"P(foul) × P(miss 3) × P(make 2 of 3 FT)"| E2
+    3A -->|"P(foul) × P(miss 3) × P(make 3 of 3 FT)"| E3
+    3A -->|"P(foul) × P(make 3) × P(miss and1)"| E3
+    3A -->|"P(foul) × P(make 3) × P(make and1)"| E4([end_4pts])
+
+    style S fill:#4a90d9,color:#fff
+    style E0 fill:#e74c3c,color:#fff
+    style E1 fill:#e74c3c,color:#fff
+    style E2 fill:#e74c3c,color:#fff
+    style E3 fill:#e74c3c,color:#fff
+    style E4 fill:#e74c3c,color:#fff
+    style 2A fill:#2ecc71,color:#fff
+    style 3A fill:#2ecc71,color:#fff
