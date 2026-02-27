@@ -14,3 +14,6 @@ wheels/
 .cursor/
 .cursorrules
 .cursorignore
+
+# iCloud files
+.DS_Store
