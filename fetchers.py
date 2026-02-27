@@ -3,6 +3,7 @@ from io import StringIO
 import bs4
 import pandas as pd
 import requests
+from pydantic_core import validate_call
 
 from models import League, Stats
 from protocols import StatFetcher
@@ -30,6 +31,7 @@ class BBallRefStatFetcher(StatFetcher):
         self.nba_stats: dict[int, pd.DataFrame] = {}
         self.wnba_stats: dict[int, pd.DataFrame] = {}
 
+    @validate_call
     def fetch(self, league: League, season: int, team_name: str) -> Stats:
         """
         Fetch team stats for the given league, season, and team.
@@ -59,6 +61,8 @@ class BBallRefStatFetcher(StatFetcher):
             return self.fetch_nba(season, team_name)
         elif league == League.WNBA:
             return self.fetch_wnba(season, team_name)
+        else:
+            raise NotImplementedError(f"Fetching {league} stats is not implemented.")
 
     def fetch_nba(self, season: int, team_name: str) -> Stats:
         """
@@ -75,6 +79,11 @@ class BBallRefStatFetcher(StatFetcher):
         -------
         Stats
             Team statistics for the given season.
+
+        Raises
+        ------
+        NotImplementedError
+            NBA stats fetching is not yet implemented.
         """
         raise NotImplementedError("Fetching NBA stats is not implemented.")
 
@@ -93,6 +102,11 @@ class BBallRefStatFetcher(StatFetcher):
         -------
         Stats
             Team statistics for the given season.
+
+        Raises
+        ------
+        NotImplementedError
+            WNBA stats fetching is not yet implemented.
         """
         raise NotImplementedError("Fetching WNBA stats is not implemented.")
 
@@ -115,50 +129,9 @@ class BBallRefStatFetcher(StatFetcher):
         Stats
             Team statistics for the given season.
         """
-        if season not in self.ncaam_stats:
-            stat_types = ["school", "opponent", "advanced-school", "advanced-opponent"]
-
-            urls = [
-                f"{self.ncaam_base_url}/{season}-{stat_type}-stats.html"
-                for stat_type in stat_types
-            ]
-
-            responses = [requests.get(url) for url in urls]
-
-            table_ids = [
-                "basic_school_stats",
-                "basic_opp_stats",
-                "adv_school_stats",
-                "adv_opp_stats",
-            ]
-            tables = {}
-            for table_id, response in zip(table_ids, responses):
-                soup = bs4.BeautifulSoup(response.text, "html.parser")
-                table = soup.find("table", id=table_id)
-                df = pd.read_html(StringIO(str(table)))[0]
-                tables[table_id] = df
-
-            for table_id, table in tables.items():
-                tables[table_id] = self._clean_table(
-                    table,
-                    self._NCAA_DROP_COLUMNS[table_id],
-                    self._NCAA_SCALE_COLUMNS.get(table_id, None),
-                    self._NCAA_RENAME_COLUMNS.get(table_id, None),
-                )
-                tables[table_id] = self._calculate_stats(table_id, tables[table_id])
-
-            merged_df = (
-                tables["basic_school_stats"]
-                .join(tables["basic_opp_stats"], how="inner")
-                .join(tables["adv_school_stats"], how="inner")
-                .join(tables["adv_opp_stats"], how="inner")
-            )
-
-            self.ncaam_stats[season] = merged_df
-
-        team_stats = Stats(**self.ncaam_stats[season].loc[team_name])
-
-        return team_stats
+        return self._fetch_ncaa(
+            self.ncaam_base_url, self.ncaam_stats, season, team_name
+        )
 
     def fetch_ncaaw(self, season: int, team_name: str) -> Stats:
         """
@@ -179,50 +152,9 @@ class BBallRefStatFetcher(StatFetcher):
         Stats
             Team statistics for the given season.
         """
-        if season not in self.ncaaw_stats:
-            stat_types = ["school", "opponent", "advanced-school", "advanced-opponent"]
-
-            urls = [
-                f"{self.ncaaw_base_url}/{season}-{stat_type}-stats.html"
-                for stat_type in stat_types
-            ]
-
-            responses = [requests.get(url) for url in urls]
-
-            table_ids = [
-                "basic_school_stats",
-                "basic_opp_stats",
-                "adv_school_stats",
-                "adv_opp_stats",
-            ]
-            tables = {}
-            for table_id, response in zip(table_ids, responses):
-                soup = bs4.BeautifulSoup(response.text, "html.parser")
-                table = soup.find("table", id=table_id)
-                df = pd.read_html(StringIO(str(table)))[0]
-                tables[table_id] = df
-
-            for table_id, table in tables.items():
-                tables[table_id] = self._clean_table(
-                    table,
-                    self._NCAA_DROP_COLUMNS[table_id],
-                    self._NCAA_SCALE_COLUMNS.get(table_id, None),
-                    self._NCAA_RENAME_COLUMNS.get(table_id, None),
-                )
-                tables[table_id] = self._calculate_stats(table_id, tables[table_id])
-
-            merged_df = (
-                tables["basic_school_stats"]
-                .join(tables["basic_opp_stats"], how="inner")
-                .join(tables["adv_school_stats"], how="inner")
-                .join(tables["adv_opp_stats"], how="inner")
-            )
-
-            self.ncaaw_stats[season] = merged_df
-
-        team_stats = Stats(**self.ncaaw_stats[season].loc[team_name])
-
-        return team_stats
+        return self._fetch_ncaa(
+            self.ncaaw_base_url, self.ncaaw_stats, season, team_name
+        )
 
     _NCAA_BASE_DROP_COLUMNS = [
         ("Unnamed: 0_level_0", "Rk"),
@@ -323,6 +255,77 @@ class BBallRefStatFetcher(StatFetcher):
         },
     }
 
+    def _fetch_ncaa(
+        self, base_url: str, cache: dict[int, pd.DataFrame], season: int, team_name: str
+    ) -> Stats:
+        """
+        Fetch NCAA stats from Basketball Reference for a given team and season.
+
+        Fetches and caches basic and advanced school/opponent stats, merges them,
+        and returns stats for the requested team. Uses the provided cache to
+        avoid refetching for the same season.
+
+        Parameters
+        ----------
+        base_url : str
+            Base URL for the NCAA stats (men's or women's).
+        cache : dict of int to pd.DataFrame
+            In-memory cache keyed by season; populated if season not present.
+        season : int
+            Season year (championship year).
+        team_name : str
+            Name of the school/team.
+
+        Returns
+        -------
+        Stats
+            Team statistics for the given season.
+        """
+        if season not in cache:
+            stat_types = ["school", "opponent", "advanced-school", "advanced-opponent"]
+
+            urls = [
+                f"{base_url}/{season}-{stat_type}-stats.html"
+                for stat_type in stat_types
+            ]
+
+            responses = [requests.get(url) for url in urls]
+
+            table_ids = [
+                "basic_school_stats",
+                "basic_opp_stats",
+                "adv_school_stats",
+                "adv_opp_stats",
+            ]
+            tables = {}
+            for table_id, response in zip(table_ids, responses):
+                soup = bs4.BeautifulSoup(response.text, "html.parser")
+                table = soup.find("table", id=table_id)
+                df = pd.read_html(StringIO(str(table)))[0]
+                tables[table_id] = df
+
+            for table_id, table in tables.items():
+                tables[table_id] = self._clean_table(
+                    table,
+                    self._NCAA_DROP_COLUMNS[table_id],
+                    self._NCAA_SCALE_COLUMNS.get(table_id, None),
+                    self._NCAA_RENAME_COLUMNS.get(table_id, None),
+                )
+                tables[table_id] = self._calculate_stats(table_id, tables[table_id])
+
+            merged_df = (
+                tables["basic_school_stats"]
+                .join(tables["basic_opp_stats"], how="inner")
+                .join(tables["adv_school_stats"], how="inner")
+                .join(tables["adv_opp_stats"], how="inner")
+            )
+
+            cache[season] = merged_df
+
+        team_stats = Stats(**cache[season].loc[team_name])
+
+        return team_stats
+
     def _clean_table(
         self,
         table: pd.DataFrame,
@@ -341,8 +344,8 @@ class BBallRefStatFetcher(StatFetcher):
         ----------
         table : pd.DataFrame
             Raw table from Basketball Reference.
-        drop_columns : list of str
-            Column identifiers to drop.
+        drop_columns : list
+            Column labels to drop (tuples for MultiIndex columns).
         scale_columns : list of str, optional
             Column names to scale by 1/100. Default is None.
         rename_columns : dict of str to str, optional
@@ -366,12 +369,7 @@ class BBallRefStatFetcher(StatFetcher):
             "School" if "School" in table.columns else "Team", drop=True
         )
         table = table[table.index.notna()]
-        if table.index.name == "School":
-            table = table[table.index != "School"]
-        elif table.index.name == "Team":
-            table = table[table.index != "Team"]
-        else:
-            raise ValueError(f"Index name {table.index.name} not supported.")
+        table = table[table.index != table.index.name]
         table = table.apply(pd.to_numeric)
         if rename_columns:
             table = table.rename(columns=rename_columns)
