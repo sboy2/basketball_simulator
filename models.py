@@ -20,21 +20,23 @@ class Stats(BaseModel):
     """
 
     # Offensive stats
-    o_field_goal_percentage: float
     o_turnover_percentage: float
     o_rebound_percentage: float
     o_three_point_rate: float
     o_three_point_percentage: float
     o_free_throw_rate: float
     o_free_throw_percentage: float
+    o_two_point_percentage: float
+    o_two_point_rate: float
     # Defensive stats
-    d_field_goal_percentage: float
     d_turnover_percentage: float
     d_rebound_percentage: float
     d_three_point_rate: float
     d_three_point_percentage: float
     d_free_throw_rate: float
     d_free_throw_percentage: float
+    d_two_point_percentage: float
+    d_two_point_rate: float
     # Style stats
     pace: float
     # Comparison stats
@@ -42,20 +44,22 @@ class Stats(BaseModel):
     strength_of_schedule: float
 
     @field_validator(
-        "o_field_goal_percentage",
         "o_turnover_percentage",
         "o_rebound_percentage",
         "o_three_point_rate",
         "o_three_point_percentage",
         "o_free_throw_rate",
         "o_free_throw_percentage",
-        "d_field_goal_percentage",
+        "o_two_point_percentage",
+        "o_two_point_rate",
         "d_turnover_percentage",
         "d_rebound_percentage",
         "d_three_point_rate",
         "d_three_point_percentage",
         "d_free_throw_rate",
         "d_free_throw_percentage",
+        "d_two_point_percentage",
+        "d_two_point_rate",
     )
     def validate_percentage(cls, v: float) -> float:
         """
