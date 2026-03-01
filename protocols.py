@@ -1,6 +1,6 @@
 from typing import Protocol
 
-from models import Stats, Team
+from models import Team, TeamStats
 
 
 class StatFetcher(Protocol):
@@ -8,7 +8,7 @@ class StatFetcher(Protocol):
     Protocol to fetch the stats of a team.
     """
 
-    def fetch(self, league_name: str, season: int, team_name: str) -> Stats: ...
+    def fetch(self, league_name: str, season: int, team_name: str) -> TeamStats: ...
 
 
 class StatAdjuster(Protocol):

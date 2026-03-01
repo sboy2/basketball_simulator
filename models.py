@@ -1,3 +1,4 @@
+from abc import ABC
 from enum import Enum
 
 from pydantic import BaseModel, field_validator
@@ -14,52 +15,30 @@ class League(str, Enum):
     NCAAW = "ncaaw"
 
 
-class Stats(BaseModel):
+class Stats(BaseModel, ABC):
     """
     Model to store the stats of a team. Returned by the StatFetcher protocol.
     """
 
-    # Offensive stats
-    o_turnover_percentage: float
-    o_rebound_percentage: float
-    o_three_point_rate: float
-    o_three_point_percentage: float
-    o_free_throw_rate: float
-    o_free_throw_percentage: float
-    o_two_point_percentage: float
-    o_two_point_rate: float
-    # Defensive stats
-    d_turnover_percentage: float
-    d_rebound_percentage: float
-    d_three_point_rate: float
-    d_three_point_percentage: float
-    d_free_throw_rate: float
-    d_free_throw_percentage: float
-    d_two_point_percentage: float
-    d_two_point_rate: float
-    # Style stats
     pace: float
-    # Comparison stats
-    simple_rating_system: float
-    strength_of_schedule: float
+    turnover_percentage: float
+    two_point_rate: float
+    two_point_foul_rate: float
+    two_point_percentage: float
+    three_point_rate: float
+    three_point_foul_rate: float
+    three_point_percentage: float
+    free_throw_percentage: float
 
     @field_validator(
-        "o_turnover_percentage",
-        "o_rebound_percentage",
-        "o_three_point_rate",
-        "o_three_point_percentage",
-        "o_free_throw_rate",
-        "o_free_throw_percentage",
-        "o_two_point_percentage",
-        "o_two_point_rate",
-        "d_turnover_percentage",
-        "d_rebound_percentage",
-        "d_three_point_rate",
-        "d_three_point_percentage",
-        "d_free_throw_rate",
-        "d_free_throw_percentage",
-        "d_two_point_percentage",
-        "d_two_point_rate",
+        "turnover_percentage",
+        "two_point_rate",
+        "two_point_foul_rate",
+        "two_point_percentage",
+        "three_point_rate",
+        "three_point_foul_rate",
+        "three_point_percentage",
+        "free_throw_percentage",
     )
     def validate_percentage(cls, v: float) -> float:
         """
@@ -77,6 +56,49 @@ class Stats(BaseModel):
         if v <= 0:
             raise ValueError("Pace must be greater than 0.")
         return v
+
+
+class OffensiveStats(Stats):
+    """
+    Model to store the offensive stats of a team.
+    """
+
+    offensive_rebound_percentage: float
+
+    @field_validator("offensive_rebound_percentage")
+    def validate_offensive_rebound_percentage(cls, v: float) -> float:
+        """
+        Validate that the offensive rebound percentage is between 0 and 1.
+        """
+        if not 0 <= v <= 1:
+            raise ValueError("Offensive rebound percentage must be between 0 and 1.")
+        return v
+
+
+class DefensiveStats(Stats):
+    """
+    Model to store the defensive stats of a team.
+    """
+
+    defensive_rebound_percentage: float
+
+    @field_validator("defensive_rebound_percentage")
+    def validate_defensive_rebound_percentage(cls, v: float) -> float:
+        """
+        Validate that the defensive rebound percentage is between 0 and 1.
+        """
+        if not 0 <= v <= 1:
+            raise ValueError("Defensive rebound percentage must be between 0 and 1.")
+        return v
+
+
+class TeamStats(BaseModel):
+    """
+    Model to store the stats of a team.
+    """
+
+    offensive: OffensiveStats
+    defensive: DefensiveStats
 
 
 class Team(BaseModel):
