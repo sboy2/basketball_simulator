@@ -109,7 +109,7 @@ class Team(BaseModel):
     name: str
     league: League
     season: int
-    stats: Stats
+    stats: OffensiveStats
 
     @field_validator("season")
     def validate_season(cls, v: int) -> int:

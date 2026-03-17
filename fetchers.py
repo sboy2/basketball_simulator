@@ -3,9 +3,9 @@ from io import StringIO
 import bs4
 import pandas as pd
 import requests
-from pydantic_core import validate_call
+from pydantic import validate_call
 
-from models import League, Stats
+from models import DefensiveStats, League, OffensiveStats, TeamStats
 from protocols import StatFetcher
 
 
@@ -26,13 +26,17 @@ class BBallRefStatFetcher(StatFetcher):
         self.ncaam_base_url = "https://www.sports-reference.com/cbb/seasons/men"
         self.ncaaw_base_url = "https://www.sports-reference.com/cbb/seasons/women"
 
-        self.ncaam_stats: dict[int, pd.DataFrame] = {}
-        self.ncaaw_stats: dict[int, pd.DataFrame] = {}
-        self.nba_stats: dict[int, pd.DataFrame] = {}
-        self.wnba_stats: dict[int, pd.DataFrame] = {}
+        self.ncaam_offensive_stats: dict[int, pd.DataFrame] = {}
+        self.ncaam_defensive_stats: dict[int, pd.DataFrame] = {}
+        self.ncaaw_offensive_stats: dict[int, pd.DataFrame] = {}
+        self.ncaaw_defensive_stats: dict[int, pd.DataFrame] = {}
+        self.nba_offensive_stats: dict[int, pd.DataFrame] = {}
+        self.nba_defensive_stats: dict[int, pd.DataFrame] = {}
+        self.wnba_offensive_stats: dict[int, pd.DataFrame] = {}
+        self.wnba_defensive_stats: dict[int, pd.DataFrame] = {}
 
     @validate_call
-    def fetch(self, league: League, season: int, team_name: str) -> Stats:
+    def fetch(self, league: League, season: int, team_name: str) -> TeamStats:
         """
         Fetch team stats for the given league, season, and team.
 
@@ -50,8 +54,8 @@ class BBallRefStatFetcher(StatFetcher):
 
         Returns
         -------
-        Stats
-            Team statistics for the given season.
+        TeamStats
+            Team statistics (offensive and defensive) for the given season.
         """
         if league == League.NCAAM:
             return self.fetch_ncaam(season, team_name)
@@ -64,7 +68,7 @@ class BBallRefStatFetcher(StatFetcher):
         else:
             raise NotImplementedError(f"Fetching {league} stats is not implemented.")
 
-    def fetch_nba(self, season: int, team_name: str) -> Stats:
+    def fetch_nba(self, season: int, team_name: str) -> TeamStats:
         """
         Fetch team stats from Basketball Reference for the NBA.
 
@@ -77,7 +81,7 @@ class BBallRefStatFetcher(StatFetcher):
 
         Returns
         -------
-        Stats
+        TeamStats
             Team statistics for the given season.
 
         Raises
@@ -87,7 +91,7 @@ class BBallRefStatFetcher(StatFetcher):
         """
         raise NotImplementedError("Fetching NBA stats is not implemented.")
 
-    def fetch_wnba(self, season: int, team_name: str) -> Stats:
+    def fetch_wnba(self, season: int, team_name: str) -> TeamStats:
         """
         Fetch team stats from Basketball Reference for the WNBA.
 
@@ -101,7 +105,7 @@ class BBallRefStatFetcher(StatFetcher):
         Returns
         -------
         Stats
-            Team statistics for the given season.
+            TeamStats statistics for the given season.
 
         Raises
         ------
@@ -110,7 +114,7 @@ class BBallRefStatFetcher(StatFetcher):
         """
         raise NotImplementedError("Fetching WNBA stats is not implemented.")
 
-    def fetch_ncaam(self, season: int, team_name: str) -> Stats:
+    def fetch_ncaam(self, season: int, team_name: str) -> TeamStats:
         """
         Fetch team stats from Basketball Reference for NCAA Men's basketball.
 
@@ -126,14 +130,18 @@ class BBallRefStatFetcher(StatFetcher):
 
         Returns
         -------
-        Stats
+        TeamStats
             Team statistics for the given season.
         """
         return self._fetch_ncaa(
-            self.ncaam_base_url, self.ncaam_stats, season, team_name
+            self.ncaam_base_url,
+            self.ncaam_offensive_stats,
+            self.ncaam_defensive_stats,
+            season,
+            team_name,
         )
 
-    def fetch_ncaaw(self, season: int, team_name: str) -> Stats:
+    def fetch_ncaaw(self, season: int, team_name: str) -> TeamStats:
         """
         Fetch team stats from Basketball Reference for NCAA Women's basketball.
 
@@ -149,11 +157,15 @@ class BBallRefStatFetcher(StatFetcher):
 
         Returns
         -------
-        Stats
+        TeamStats
             Team statistics for the given season.
         """
         return self._fetch_ncaa(
-            self.ncaaw_base_url, self.ncaaw_stats, season, team_name
+            self.ncaaw_base_url,
+            self.ncaaw_offensive_stats,
+            self.ncaaw_defensive_stats,
+            season,
+            team_name,
         )
 
     _NCAA_BASE_DROP_COLUMNS = [
@@ -162,6 +174,8 @@ class BBallRefStatFetcher(StatFetcher):
         ("Overall", "W"),
         ("Overall", "L"),
         ("Overall", "W-L%"),
+        ("Overall", "SRS"),
+        ("Overall", "SOS"),
         ("Conf.", "W"),
         ("Conf.", "L"),
         ("Home", "W"),
@@ -188,8 +202,6 @@ class BBallRefStatFetcher(StatFetcher):
         ],
         "basic_opp_stats": [
             *_NCAA_BASE_DROP_COLUMNS,
-            ("Overall", "SRS"),
-            ("Overall", "SOS"),
             ("Opponent", "MP"),
             ("Opponent", "FG%"),
             ("Opponent", "3P%"),
@@ -204,8 +216,6 @@ class BBallRefStatFetcher(StatFetcher):
         ],
         "adv_school_stats": [
             *_NCAA_BASE_DROP_COLUMNS,
-            ("Overall", "SRS"),
-            ("Overall", "SOS"),
             ("School Advanced", "ORtg"),
             ("School Advanced", "FTr"),
             ("School Advanced", "3PAr"),
@@ -219,9 +229,6 @@ class BBallRefStatFetcher(StatFetcher):
         ],
         "adv_opp_stats": [
             *_NCAA_BASE_DROP_COLUMNS,
-            ("Overall", "SRS"),
-            ("Overall", "SOS"),
-            ("Opponent Advanced", "Pace"),
             ("Opponent Advanced", "ORtg"),
             ("Opponent Advanced", "FTr"),
             ("Opponent Advanced", "3PAr"),
@@ -239,10 +246,6 @@ class BBallRefStatFetcher(StatFetcher):
         "adv_opp_stats": ["d_turnover_percentage", "d_rebound_percentage"],
     }
     _NCAA_RENAME_COLUMNS = {
-        "basic_school_stats": {
-            "SRS": "simple_rating_system",
-            "SOS": "strength_of_schedule",
-        },
         "adv_school_stats": {
             "Pace": "pace",
             "TOV%": "o_turnover_percentage",
@@ -256,8 +259,13 @@ class BBallRefStatFetcher(StatFetcher):
     }
 
     def _fetch_ncaa(
-        self, base_url: str, cache: dict[int, pd.DataFrame], season: int, team_name: str
-    ) -> Stats:
+        self,
+        base_url: str,
+        offensive_cache: dict[int, pd.DataFrame],
+        defensive_cache: dict[int, pd.DataFrame],
+        season: int,
+        team_name: str,
+    ) -> TeamStats:
         """
         Fetch NCAA stats from Basketball Reference for a given team and season.
 
@@ -269,7 +277,9 @@ class BBallRefStatFetcher(StatFetcher):
         ----------
         base_url : str
             Base URL for the NCAA stats (men's or women's).
-        cache : dict of int to pd.DataFrame
+        offensive_cache : dict of int to pd.DataFrame
+            In-memory cache keyed by season; populated if season not present.
+        defensive_cache : dict of int to pd.DataFrame
             In-memory cache keyed by season; populated if season not present.
         season : int
             Season year (championship year).
@@ -278,10 +288,10 @@ class BBallRefStatFetcher(StatFetcher):
 
         Returns
         -------
-        Stats
-            Team statistics for the given season.
+        TeamStats
+            Team statistics (offensive and defensive) for the given season.
         """
-        if season not in cache:
+        if season not in offensive_cache:
             stat_types = ["school", "opponent", "advanced-school", "advanced-opponent"]
 
             urls = [
@@ -313,18 +323,29 @@ class BBallRefStatFetcher(StatFetcher):
                 )
                 tables[table_id] = self._calculate_stats(table_id, tables[table_id])
 
-            merged_df = (
-                tables["basic_school_stats"]
-                .join(tables["basic_opp_stats"], how="inner")
-                .join(tables["adv_school_stats"], how="inner")
-                .join(tables["adv_opp_stats"], how="inner")
+            merged_offensive_df = tables["basic_school_stats"].join(
+                tables["adv_school_stats"], how="inner"
+            )
+            merged_defensive_df = tables["basic_opp_stats"].join(
+                tables["adv_opp_stats"], how="inner"
             )
 
-            cache[season] = merged_df
+            offensive_cache[season] = merged_offensive_df
+            defensive_cache[season] = merged_defensive_df
 
-        team_stats = Stats(**cache[season].loc[team_name])
+        offensive_team_row = offensive_cache[season].loc[team_name]
+        defensive_team_row = defensive_cache[season].loc[team_name]
+        off_dict = offensive_team_row.to_dict()
+        off_dict = {k.removeprefix("o_"): v for k, v in off_dict.items()}
+        off_dict["offensive_rebound_percentage"] = off_dict.pop("rebound_percentage")
+        def_dict = defensive_team_row.to_dict()
+        def_dict = {k.removeprefix("d_"): v for k, v in def_dict.items()}
+        def_dict["defensive_rebound_percentage"] = def_dict.pop("rebound_percentage")
 
-        return team_stats
+        return TeamStats(
+            offensive=OffensiveStats(**off_dict),
+            defensive=DefensiveStats(**def_dict),
+        )
 
     def _clean_table(
         self,
@@ -407,6 +428,13 @@ class BBallRefStatFetcher(StatFetcher):
                 table["FGA"] - table["3PA"]
             )
             table["o_two_point_rate"] = 1 - table["o_three_point_rate"]
+            foul_shot_rate = table["FTA"] / table["FGA"]
+            table["o_two_point_foul_rate"] = foul_shot_rate * (
+                1 - table["o_three_point_rate"]
+            )
+            table["o_three_point_foul_rate"] = (
+                foul_shot_rate * table["o_three_point_rate"]
+            )
             table = table.drop(columns=["FG", "FGA", "3P", "3PA", "FT", "FTA"])
         elif table_id == "basic_opp_stats":
             table["d_three_point_rate"] = table["3PA"] / table["FGA"]
@@ -417,6 +445,13 @@ class BBallRefStatFetcher(StatFetcher):
                 table["FGA"] - table["3PA"]
             )
             table["d_two_point_rate"] = 1 - table["d_three_point_rate"]
+            foul_shot_rate = table["FTA"] / table["FGA"]
+            table["d_two_point_foul_rate"] = foul_shot_rate * (
+                1 - table["d_three_point_rate"]
+            )
+            table["d_three_point_foul_rate"] = (
+                foul_shot_rate * table["d_three_point_rate"]
+            )
             table = table.drop(columns=["FG", "FGA", "3P", "3PA", "FT", "FTA"])
 
         return table
