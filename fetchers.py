@@ -391,6 +391,7 @@ class BBallRefStatFetcher(StatFetcher):
         )
         table = table[table.index.notna()]
         table = table[table.index != table.index.name]
+        table.index = table.index.str.split("\xa0").str[0].str.strip()
         table = table.apply(pd.to_numeric)
         if rename_columns:
             table = table.rename(columns=rename_columns)
