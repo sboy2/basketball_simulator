@@ -27,11 +27,12 @@ class GamePredictor:
         point_distribution = np.zeros(5)
 
         # Calculate the probability of scoring 0 points
-        zero_point_probability = team.stats.turnover_percentage
-        zero_point_probability += (
-            team.stats.o_two_point_rate * team.stats.o_two_point_percentage
+        zero_point_probability = team.offensive.turnover_percentage
+        zero_point_probability += (1 - team.offensive.turnover_percentage) * (
+            team.offensive.two_point_rate
+            * (1 - team.offensive.two_point_foul_rate)
+            * (1 - team.offensive.two_point_percentage)
         )
-
         point_distribution[0] = zero_point_probability
 
         return point_distribution
